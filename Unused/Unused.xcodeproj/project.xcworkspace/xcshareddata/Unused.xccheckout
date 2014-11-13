@@ -10,29 +10,29 @@
 	<string>Unused</string>
 	<key>IDESourceControlProjectOriginsDictionary</key>
 	<dict>
-		<key>21D6FE3B-8540-4ABA-B23F-D2285074030E</key>
-		<string>https://github.com/dimohamdy/Unused.git</string>
+		<key>1630E2B02601C07F2500B93D55F126667189CC01</key>
+		<string>https://github.com/legranddamien/Unused.git</string>
 	</dict>
 	<key>IDESourceControlProjectPath</key>
-	<string>Unused/Unused.xcodeproj/project.xcworkspace</string>
+	<string>Unused/Unused.xcodeproj</string>
 	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
 	<dict>
-		<key>21D6FE3B-8540-4ABA-B23F-D2285074030E</key>
+		<key>1630E2B02601C07F2500B93D55F126667189CC01</key>
 		<string>../../..</string>
 	</dict>
 	<key>IDESourceControlProjectURL</key>
-	<string>https://github.com/dimohamdy/Unused.git</string>
+	<string>https://github.com/legranddamien/Unused.git</string>
 	<key>IDESourceControlProjectVersion</key>
-	<integer>110</integer>
+	<integer>111</integer>
 	<key>IDESourceControlProjectWCCIdentifier</key>
-	<string>21D6FE3B-8540-4ABA-B23F-D2285074030E</string>
+	<string>1630E2B02601C07F2500B93D55F126667189CC01</string>
 	<key>IDESourceControlProjectWCConfigurations</key>
 	<array>
 		<dict>
 			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
 			<string>public.vcs.git</string>
 			<key>IDESourceControlWCCIdentifierKey</key>
-			<string>21D6FE3B-8540-4ABA-B23F-D2285074030E</string>
+			<string>1630E2B02601C07F2500B93D55F126667189CC01</string>
 			<key>IDESourceControlWCCName</key>
 			<string>Unused</string>
 		</dict>

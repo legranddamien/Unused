@@ -30,6 +30,7 @@
 @synthesize searchButton=_searchButton;
 @synthesize exportButton=_exportButton;
 @synthesize searchDirectoryPath=_searchDirectoryPath;
+@synthesize typeSearchRadio=_typeSearchRadio;
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     
@@ -38,6 +39,7 @@
 
     // Setup the retina images array
     _retinaImagePaths = [[NSMutableArray alloc] init];
+    _retinaHDImagePaths = [[NSMutableArray alloc] init];
     _iPadImagePaths = [[NSMutableArray alloc] init];
     _retinaiPadImagePaths = [[NSMutableArray alloc] init];
 
@@ -55,6 +57,20 @@
     [_searchButton setKeyEquivalent:@"\r"];
     [_resultsTableView setAllowsMultipleSelection: YES];
     
+    NSEvent * (^monitorHandler)(NSEvent *);
+    monitorHandler = ^NSEvent * (NSEvent * theEvent){
+        
+        if([theEvent keyCode] == 49)
+        {
+            [self spacePressed];
+        }
+        
+        return theEvent;
+    };
+    
+    eventMon = [NSEvent addLocalMonitorForEventsMatchingMask:NSKeyDownMask
+                                                     handler:monitorHandler];
+    
 
     
 }
@@ -63,14 +79,29 @@
     
     [_searchDirectoryPath release];
     [_pngFiles release];
+    [_imagesetFolders release];
     [_results release];
     [_retinaImagePaths release];
+    [_retinaHDImagePaths release];
     [_queue release];
+    [eventMon release];
 
     [super dealloc];
 }
 
 #pragma mark - Actions
+
+-(void)spacePressed
+{
+    if ([QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible]) {
+        [[QLPreviewPanel sharedPreviewPanel] orderOut:nil];
+    } else {
+        if(_results.count == 0) return;
+        [[QLPreviewPanel sharedPreviewPanel] updateController];
+        [[QLPreviewPanel sharedPreviewPanel] makeKeyAndOrderFront:nil];
+    }
+}
+
 - (IBAction)browseButtonSelected:(id)sender {
     
     // Show an open panel
@@ -80,7 +111,7 @@
     [openPanel setCanChooseFiles:NO];
 
     NSInteger option = [openPanel runModal];
-    if (option == NSOKButton) {
+    if (option == NSModalResponseOK) {
         // Store the path
         self.searchDirectoryPath = [[openPanel directoryURL] path];
 
@@ -95,7 +126,7 @@
     [save setAllowedFileTypes:[NSArray arrayWithObject:@"txt"]];
     NSInteger result = [save runModal];
 
-    if (result == NSOKButton) {
+    if (result == NSModalResponseOK) {
         NSString *selectedFile = [[save URL] path];
 
         NSMutableString *outputResults = [[NSMutableString alloc] init];
@@ -142,22 +173,124 @@
     // Reset
     [_results removeAllObjects];
     [_retinaImagePaths removeAllObjects];
+    [_retinaHDImagePaths removeAllObjects];
     [_iPadImagePaths removeAllObjects];
     [_retinaiPadImagePaths removeAllObjects];
     [_resultsTableView reloadData];
 
+    
+    NSInvocationOperation *op = nil;
+    
     // Start the search
-    NSInvocationOperation *op = [[NSInvocationOperation alloc] initWithTarget:self selector:@selector(runImageSearch) object:nil];
+    if(_typeSearchRadio.selectedRow == 0)
+    {
+        op = [[NSInvocationOperation alloc] initWithTarget:self selector:@selector(runXcassetsSearch) object:nil];
+    }
+    else
+    {
+        op = [[NSInvocationOperation alloc] initWithTarget:self selector:@selector(runImageSearch) object:nil];
+    }
+    
+    // Start the ui
+    [self setUIEnabled:NO];
+    
     [_queue addOperation:op];
     [op release];
 
     isSearching = YES;
 }
 
-- (void)runImageSearch {
+- (void)runXcassetsSearch {
     
-    // Start the ui
-    [self setUIEnabled:NO];
+    [_imagesetFolders release];
+    _imagesetFolders = [[self imagesetFoldersAtDirectory:_searchDirectoryPath] retain];
+    
+    NSArray *imagesetFolders = _imagesetFolders;
+    
+    if (SHOULD_FILTER_ENUM_VARIANTS) {
+        
+        NSMutableArray *mutableImagesetFiles = [NSMutableArray arrayWithArray:imagesetFolders];
+        
+        // Trying to filter image names like: "Section_0.imageset", "Section_1.imageset", etc (these names can possibly be created by [NSString stringWithFormat:@"Section_%d", (int)] constructions) to just "Section_" item
+        for (NSInteger index = 0, count = [mutableImagesetFiles count]; index < count; index++) {
+            
+            NSString *imageName = [mutableImagesetFiles objectAtIndex:index];
+            NSRegularExpression *regExp = [NSRegularExpression regularExpressionWithPattern:@"[_-].*\\d.*.imageset" options:NSRegularExpressionCaseInsensitive error:nil];
+            NSString *newImageName = [regExp stringByReplacingMatchesInString:imageName options:NSMatchingReportProgress range:NSMakeRange(0, [imageName length]) withTemplate:@""];
+            if (newImageName != nil)
+                [mutableImagesetFiles replaceObjectAtIndex:index withObject:newImageName];
+        }
+        
+        // Remove duplicates and update imagesetFolders array
+        imagesetFolders = [[NSSet setWithArray:mutableImagesetFiles] allObjects];
+    }
+    
+    // Now loop and check
+    for (NSString *imagesetPath in imagesetFolders) {
+        
+        // Check that the png path is not empty
+        if (![imagesetPath isEqualToString:@""]) {
+            // Grab the file name
+            NSString *imageName = [imagesetPath lastPathComponent];
+            
+            imageName = [imageName stringByReplacingOccurrencesOfString:@".imageset" withString:@""];
+            
+            // Run the checks
+            if ([_mCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"m"]) {
+                continue;
+            }
+            
+            if ([_xibCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"xib"]) {
+                continue;
+            }
+            
+            if ([_storyboardCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"storyboard"]) {
+                continue;
+            }
+            
+            if ([_cppCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"cpp"]) {
+                continue;
+            }
+            
+            if ([_mmCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"mm"]) {
+                continue;
+            }
+            
+            if ([_htmlCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"html"]) {
+                continue;
+            }
+            
+            if ([_plistCheckbox state] && [self occurancesOfImageNamed:imageName atDirectory:_searchDirectoryPath inFileExtensionType:@"plist"]) {
+                continue;
+            }
+            
+            // Is it not found
+            // Update results
+            [self addImagesetNewResult:imagesetPath];
+        }
+    }
+    
+    // Sorting results and refreshing table
+    [_results sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    [_resultsTableView reloadData];
+    
+    // Calculate how much file size we saved and update the label
+    int fileSize = 0;
+    for (NSString *path in _results) {
+        fileSize += [[[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil] fileSize];
+    }
+    
+    dispatch_async(dispatch_get_main_queue(), ^(void){
+        // Enable the ui
+        [_statusLabel setStringValue:[NSString stringWithFormat:@"Completed - Found %ld - Size %@", (unsigned long)[_results count], [self stringFromFileSize:fileSize]]];
+        [self setUIEnabled:YES];
+    });
+    
+    isSearching = NO;
+    
+}
+
+- (void)runImageSearch {
 
     // Find all the .png files in the folder
     [_pngFiles release];
@@ -187,6 +320,13 @@
     for (NSString *pngPath in _pngFiles) {
         NSString *imageName = [pngPath lastPathComponent];
 
+        // Does the image have a @3x
+        NSRange retinaHDRange = [imageName rangeOfString:@"@3x"];
+        if (retinaHDRange.location != NSNotFound) {
+            // Add to retina image paths
+            [_retinaHDImagePaths addObject:pngPath];
+        }
+        
         // Does the image have a @2x
         NSRange retinaRange = [imageName rangeOfString:@"@2x"];
         if (retinaRange.location != NSNotFound) {
@@ -264,10 +404,11 @@
         fileSize += [[[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil] fileSize];
     }
 
-    [_statusLabel setStringValue:[NSString stringWithFormat:@"Completed - Found %ld - Size %@", (unsigned long)[_results count], [self stringFromFileSize:fileSize]]];
-
-    // Enable the ui
-    [self setUIEnabled:YES];
+    dispatch_async(dispatch_get_main_queue(), ^(void){
+        // Enable the ui
+        [_statusLabel setStringValue:[NSString stringWithFormat:@"Completed - Found %ld - Size %@", (unsigned long)[_results count], [self stringFromFileSize:fileSize]]];
+        [self setUIEnabled:YES];
+    });
 
     isSearching = NO;
 }
@@ -292,6 +433,7 @@
         [_exportButton setHidden:NO];
         [_DeleteAllUnUsed setHidden:NO];
         [_DeleteSelected setHidden:NO];
+        [_typeSearchRadio setEnabled:YES];
 
         
 
@@ -312,7 +454,40 @@
         [_exportButton setHidden:YES];
         [_DeleteAllUnUsed setHidden:YES];
         [_DeleteSelected setHidden:YES];
+        [_typeSearchRadio setEnabled:NO];
     }
+}
+
+- (NSArray *)imagesetFoldersAtDirectory:(NSString *)directoryPath {
+    
+    // Create a find task
+    NSTask *task = [[[NSTask alloc] init] autorelease];
+    [task setLaunchPath: @"/usr/bin/find"];
+    
+    // Search for all png files
+    NSArray *argvals = [NSArray arrayWithObjects:directoryPath,@"-name",@"*.imageset", nil];
+    [task setArguments: argvals];
+    
+    NSPipe *pipe = [NSPipe pipe];
+    [task setStandardOutput: pipe];
+    
+    NSFileHandle *file;
+    file = [pipe fileHandleForReading];
+    
+    [task launch];
+    
+    // Read the response
+    NSData *data;
+    data = [file readDataToEndOfFile];
+    
+    NSString *string;
+    string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    
+    // See if we can create a lines array
+    NSArray *lines = [string componentsSeparatedByString:@"\n"];
+    
+    return lines;
+    
 }
 
 - (NSArray *)pngFilesAtDirectory:(NSString *)directoryPath {
@@ -350,6 +525,12 @@
     
     NSString *imageName = [imagePath lastPathComponent];
 
+    // Does the image have a @3x
+    NSRange retinaHDRange = [imageName rangeOfString:@"@3x"];
+    if(retinaHDRange.location != NSNotFound) {
+        return NO;
+    }
+    
     // Does the image have a @2x
     NSRange retinaRange = [imageName rangeOfString:@"@2x"];
     if(retinaRange.location != NSNotFound) {
@@ -377,7 +558,7 @@
     }
 
     // Is the name Icon
-    if([imageName isEqualToString:@"Icon.png"] || [imageName isEqualToString:@"Icon@2x.png"] || [imageName isEqualToString:@"Icon-72.png"]) {
+    if([imageName isEqualToString:@"Icon.png"] || [imageName isEqualToString:@"Icon@2x.png"] || [imageName isEqualToString:@"Icon@3x.png"] || [imageName isEqualToString:@"Icon-72.png"]) {
         return NO;
     }
 
@@ -437,6 +618,25 @@
 
 }
 
+- (void)addImagesetNewResult:(NSString *)imagesetPath {
+    
+    if ([_imagesetFolders indexOfObject:imagesetPath] == NSNotFound)
+        return;
+    
+    // Add and reload
+    [_results addObject:imagesetPath];
+    
+    dispatch_async(dispatch_get_main_queue(), ^(void){
+        // Reload
+        [_resultsTableView reloadData];
+        
+        // Scroll to the bottom
+        NSInteger numberOfRows = [_resultsTableView numberOfRows];
+        if (numberOfRows > 0)
+            [_resultsTableView scrollRowToVisible:numberOfRows - 1];
+    });
+}
+
 - (void)addNewResult:(NSString *)pngPath {
     
     if ([_pngFiles indexOfObject:pngPath] == NSNotFound)
@@ -446,6 +646,25 @@
     [_results addObject:pngPath];
 
     NSString *imageName = [pngPath lastPathComponent];
+    
+    // Check for an @3x image too!
+    for (NSString *retinaPath in _retinaHDImagePaths) {
+        
+        // Compare the image name and the retina image name
+        
+        imageName = [imageName stringByDeletingPathExtension];
+        NSString *retinaImageName = [retinaPath lastPathComponent];
+        retinaImageName = [retinaImageName stringByDeletingPathExtension];
+        retinaImageName = [retinaImageName stringByReplacingOccurrencesOfString:@"@3x" withString:@""];
+        
+        // Check
+        if ([imageName isEqualToString:retinaImageName]) {
+            // Add it
+            [_results addObject:retinaPath];
+            
+            break;
+        }
+    }
     
     // Check for an @2x image too!
     for (NSString *retinaPath in _retinaImagePaths) {
@@ -494,13 +713,15 @@
         }
     }
 
-    // Reload
-    [_resultsTableView reloadData];
-
-    // Scroll to the bottom
-    NSInteger numberOfRows = [_resultsTableView numberOfRows];
-    if (numberOfRows > 0)
-        [_resultsTableView scrollRowToVisible:numberOfRows - 1];
+    dispatch_async(dispatch_get_main_queue(), ^(void){
+        // Reload
+        [_resultsTableView reloadData];
+        
+        // Scroll to the bottom
+        NSInteger numberOfRows = [_resultsTableView numberOfRows];
+        if (numberOfRows > 0)
+            [_resultsTableView scrollRowToVisible:numberOfRows - 1];
+    });
 }
 
 #pragma mark - NSTableView Delegate
@@ -516,6 +737,10 @@
     if ([[tableColumn identifier] isEqualToString:@"shortName"]) {
         
         NSString *imageName = [pngPath lastPathComponent];
+        if([imageName rangeOfString:@".imageset"].location != NSNotFound)
+        {
+            imageName = [imageName stringByReplacingOccurrencesOfString:@".imageset" withString:@""];
+        }
         return imageName;
     }
 //    if ([[tableColumn identifier] isEqualToString:@"viewImage"]) {
@@ -592,4 +817,52 @@
     [task launch];
 
 }
+
+
+#pragma mark - Quicklook
+
+- (BOOL)acceptsPreviewPanelControl:(QLPreviewPanel *)panel;
+{
+    return YES;
+}
+
+- (NSArray *)getTheSelectedPicturesInTheTable
+{
+    if(_results.count > 0
+       && _resultsTableView.numberOfRows > 0
+       && _resultsTableView.numberOfSelectedRows > 0)
+    {
+        NSMutableArray *results = [NSMutableArray arrayWithCapacity:_resultsTableView.numberOfSelectedRows];
+        
+        [_resultsTableView.selectedRowIndexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
+            
+            NSArray *files = [self pngFilesAtDirectory:_results[idx]];
+            
+            if(files.count > 0)
+            {
+                [results addObject:files[0]];
+            }
+        }];
+        
+        return results;
+    }
+    
+    return nil;
+}
+
+-(void)beginPreviewPanelControl:(QLPreviewPanel *)panel
+{
+    if (!_quickLookCont) {
+        _quickLookCont = [[QLPreviewCont alloc]init];
+    }
+    [_quickLookCont setPictures:[self getTheSelectedPicturesInTheTable]];
+    [[QLPreviewPanel sharedPreviewPanel] setDelegate:_quickLookCont];
+    [[QLPreviewPanel sharedPreviewPanel] setDataSource:_quickLookCont];
+}
+
+-(void)endPreviewPanelControl:(QLPreviewPanel *)panel
+{
+    
+}
+
 @end

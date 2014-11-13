@@ -7,14 +7,19 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import <QuickLook/QuickLook.h>
+#import <Quartz/Quartz.h>
+#import "QLPreviewCont.h"
 
 @interface UnusedAppDelegate : NSObject <NSApplicationDelegate, NSTableViewDataSource, NSTableViewDelegate> {
 @private
 
     // Arrays
     NSArray *_pngFiles;
+    NSArray *_imagesetFolders;
     NSMutableArray *_results;
     NSMutableArray *_retinaImagePaths;
+    NSMutableArray *_retinaHDImagePaths;
     NSMutableArray *_iPadImagePaths;
     NSMutableArray *_retinaiPadImagePaths;
 
@@ -22,6 +27,10 @@
     BOOL isSearching;
     NSButton *_DeleteAllUnUsed;
     NSButton *_DeleteSelected;
+    
+    QLPreviewCont *_quickLookCont;
+    
+    NSEvent *eventMon;
 }
 
 // Outlets
@@ -40,6 +49,7 @@
 @property (assign) IBOutlet NSButton *browseButton;
 @property (assign) IBOutlet NSTextField *pathTextField;
 @property (assign) IBOutlet NSButton *searchButton;
+@property (assign) IBOutlet NSMatrix *typeSearchRadio;
 
 // The search directory path
 @property(nonatomic, retain) NSString *searchDirectoryPath;
